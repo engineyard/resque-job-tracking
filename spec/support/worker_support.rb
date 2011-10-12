@@ -1,8 +1,9 @@
 module WorkerSupport
-  def work_until_finished
-    workers = []
-    5.times do
-      workers << Process.fork do
+
+  def work(worker_count = 5)
+    @workers = []
+    worker_count.times do
+      @workers << Process.fork do
         begin
           Resque.redis.client.reconnect
           Resque::Worker.new(:test).work(1)
@@ -12,19 +13,36 @@ module WorkerSupport
         end
       end
     end
-    any_running = true
-    while(any_running)
-      any_running = false
-      Resque.redis.keys("meta*").each do |key|
-        meta = Resque::Plugins::Meta.get_meta(key.split(":").last)
-        if meta.finished?
-          # puts "finished #{meta['job_class']}"
-        else
-          any_running = true
-          # puts "still running #{meta['job_class']}"
-        end
+  end
+
+  def finished?
+    Resque.redis.keys("meta*").each do |key|
+      meta = Resque::Plugins::Meta.get_meta(key.split(":").last)
+      if meta.finished?
+        # puts "finished #{meta['job_class']}"
+      else
+        return false
+        # puts "still running #{meta['job_class']}"
       end
+    end
+    return true
+  end
+
+  def wait_until_finished
+    while(!finished?)
       sleep(0.5)
     end
   end
+
+  def work_until_finished
+    work
+    wait_until_finished
+  end
+
+  def cleanup
+    @workers.each do |p|
+      Process.kill(9, p)
+    end
+  end
+
 end

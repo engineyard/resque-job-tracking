@@ -4,3 +4,7 @@ source 'http://rubygems.org'
 gemspec
 
 gem 'json'
+
+group :test do
+  gem 'cubbyhole'
+end

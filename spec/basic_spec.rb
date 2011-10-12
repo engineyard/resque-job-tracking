@@ -37,7 +37,7 @@ describe "the basics" do
     WhatHappened.reset!
     Resque.redis.flushall
   end
-  
+
   it "works" do
     meta = BasicJob.enqueue('foo', 'bar')
     worker = Resque::Worker.new(:test)
