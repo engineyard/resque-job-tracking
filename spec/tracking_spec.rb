@@ -24,14 +24,7 @@ class BaseJobWithPerform
   end
 
   def self.perform(meta_id, *args)
-    begin
-      around_perform(meta_id, args) do
-        self.new.perform(*args)
-      end
-    rescue => e
-      puts e.inspects
-      puts e.backtrace.join("\n")
-    end
+    self.new.perform(*args)
   end
 
 end
@@ -58,21 +51,24 @@ class Account < Cubbyhole::Base
 end
 
 
-class TakesALongTimeAndThenFails < BaseJobWithPerform
+class TypicalProblemJob < BaseJobWithPerform
 
-  def self.track(account_id)
+  def self.track(account_id, something)
     Account.get(account_id).job_tracking_identifier
   end
 
-  def perform(account_id)
+  def perform(account_id, something)
     sleep(2)
-    raise "i fail now"
+    puts "something #{something}"
+    if something == 'fail_please'
+      raise "i fail now"
+    end
   end
 
 end
 
 
-describe TakesALongTimeAndThenFails do
+describe TypicalProblemJob do
   include WorkerSupport
 
   before do
@@ -83,21 +79,52 @@ describe TakesALongTimeAndThenFails do
     cleanup
   end
 
-  it "should run and fail and be tracked" do
+  it "should keep meta data for failed jobs" do
     account = Account.create
-    TakesALongTimeAndThenFails.enqueue(account.id)
+    TypicalProblemJob.enqueue(account.id, 'fail_please')
     account.pending_jobs.size.should eq 1
     account.running_jobs.size.should eq 0
     account.failed_jobs.size.should eq 0
+    meta_id = account.pending_jobs.first
+    TypicalProblemJob.get_meta(meta_id).should_not be_nil
     work(1)
     sleep(1)
     account.pending_jobs.size.should eq 0
     account.running_jobs.size.should eq 1
     account.failed_jobs.size.should eq 0
+    account.running_jobs.first.should eq meta_id
+    TypicalProblemJob.get_meta(meta_id).should_not be_nil
     wait_until_finished
     account.pending_jobs.size.should eq 0
     account.running_jobs.size.should eq 0
     account.failed_jobs.size.should eq 1
+    account.failed_jobs.first.should eq meta_id
+    meta = TypicalProblemJob.get_meta(meta_id)
+    meta.should_not be_nil
+    #TODO: assert that job args are in the meta data
+  end
+
+  it "should lose meta data for non-failing jobs" do
+    account = Account.create
+    TypicalProblemJob.enqueue(account.id, 'pass_please')
+    account.pending_jobs.size.should eq 1
+    account.running_jobs.size.should eq 0
+    account.failed_jobs.size.should eq 0
+    meta_id = account.pending_jobs.first
+    TypicalProblemJob.get_meta(meta_id).should_not be_nil
+    work(1)
+    sleep(1)
+    account.pending_jobs.size.should eq 0
+    account.running_jobs.size.should eq 1
+    account.failed_jobs.size.should eq 0
+    account.running_jobs.first.should eq meta_id
+    TypicalProblemJob.get_meta(meta_id).should_not be_nil
+    wait_until_finished
+    account.pending_jobs.size.should eq 0
+    account.running_jobs.size.should eq 0
+    account.failed_jobs.size.should eq 0
+    sleep(1)
+    TypicalProblemJob.get_meta(meta_id).should be_nil
   end
 
   it "should store the exception in meta data"
