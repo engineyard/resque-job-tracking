@@ -2,10 +2,10 @@
 require File.expand_path('../lib/resque/plugins/job_tracking/version', __FILE__)
 
 Gem::Specification.new do |gem|
-  gem.authors       = ["Jason Hansen"]
-  gem.email         = ["jhansen@engineyard.com"]
-  gem.description   = %q{TODO: Write a gem description}
-  gem.summary       = %q{TODO: Write a gem summary}
+  gem.authors       = ["Jacob Burkhart"]
+  gem.email         = ["jacob@engineyard.com"]
+  gem.description   = %q{A resque plugin for tracking jobs and their state (pending, running, failed) based on some originating entity}
+  gem.summary       = %q{A resque plugin for tracking jobs and their state (pending, running, failed) based on some originating entity}
   gem.homepage      = ""
 
   gem.executables   = `git ls-files -- bin/*`.split("\n").map{ |f| File.basename(f) }
