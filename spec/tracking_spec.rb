@@ -23,6 +23,10 @@ class BaseJobWithPerform
     :test
   end
 
+  def self.expire_meta_in
+    1
+  end
+
   def self.perform(meta_id, *args)
     self.new.perform(*args)
   end
@@ -54,12 +58,14 @@ end
 class TypicalProblemJob < BaseJobWithPerform
 
   def self.track(account_id, something)
-    Account.get(account_id).job_tracking_identifier
+    [Account.get(account_id).job_tracking_identifier]
   end
 
   def perform(account_id, something)
+    if something == 'fail_immediate'
+      raise "failing immediate"
+    end
     sleep(2)
-    puts "something #{something}"
     if something == 'fail_please'
       raise "i fail now"
     end
@@ -101,7 +107,6 @@ describe TypicalProblemJob do
     account.failed_jobs.first.should eq meta_id
     meta = TypicalProblemJob.get_meta(meta_id)
     meta.should_not be_nil
-    #TODO: assert that job args are in the meta data
   end
 
   it "should lose meta data for non-failing jobs" do
@@ -123,12 +128,29 @@ describe TypicalProblemJob do
     account.pending_jobs.size.should eq 0
     account.running_jobs.size.should eq 0
     account.failed_jobs.size.should eq 0
-    sleep(1)
+    sleep(2)
     TypicalProblemJob.get_meta(meta_id).should be_nil
   end
 
-  it "should store the exception in meta data"
+  it "should store the exception in meta data" do
+    account = Account.create
+    TypicalProblemJob.enqueue(account.id, 'fail_immediate')
+    work_until_finished
+    account.failed_jobs.size.should eq 1
+    meta_id = account.failed_jobs.first
+    meta_data = TypicalProblemJob.get_meta(meta_id)
+    meta_data['exception_message'].should eq "failing immediate"
+    meta_data['exception_backtrace'].should_not be_nil
+  end
 
-  it "should store the job class and args in meta data"
+  it "should store the job class and args in meta data" do
+    account = Account.create
+    TypicalProblemJob.enqueue(account.id, 'dontcare')
+    account.pending_jobs.size.should eq 1
+    meta_id = account.pending_jobs.first
+    meta_data = TypicalProblemJob.get_meta(meta_id)
+    meta_data['job_class'].should eq "TypicalProblemJob"
+    meta_data['job_args'].should eq [account.id, 'dontcare']
+  end
 
 end

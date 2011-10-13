@@ -40,8 +40,10 @@ module WorkerSupport
   end
 
   def cleanup
-    @workers.each do |p|
-      Process.kill(9, p)
+    if @workers
+      @workers.each do |p|
+        Process.kill(9, p)
+      end
     end
   end
 

@@ -20,35 +20,53 @@ module Resque
         Resque.redis.smembers("#{identifier}:failed") || []
       end
 
+      def expire_normal_meta_in
+        expire_meta_in
+      end
+
+      def expire_failures_meta_in
+        expire_meta_in + (24 * 60 * 60)
+      end
+
       def before_enqueue_job_tracking(meta_id, *jobargs)
         if self.respond_to?(:track)
-          identifier = track(*jobargs)
-          Resque.redis.sadd("#{identifier}:pending", meta_id)
+          identifiers = track(*jobargs)
+          identifiers.each do |ident|
+            Resque.redis.sadd("#{ident}:pending", meta_id)
+          end
+          meta = get_meta(meta_id)
+          meta["job_args"] = jobargs
+          meta.save
         end
       end
 
       def around_perform_job_tracking(meta_id, *jobargs)
         if self.respond_to?(:track)
-          identifier = track(*jobargs)
-          Resque.redis.srem("#{identifier}:pending", meta_id)
-          Resque.redis.sadd("#{identifier}:running", meta_id)
+          identifiers = track(*jobargs)
+          identifiers.each do |ident|
+            Resque.redis.srem("#{ident}:pending", meta_id)
+            Resque.redis.sadd("#{ident}:running", meta_id)
+          end
           begin
             to_return = yield
-            puts "passed, expiring now?"
             meta = get_meta(meta_id)
-            meta.expire_in = 0
+            meta.expire_in = expire_normal_meta_in
             meta.save
             to_return
           rescue => e
-            Resque.redis.sadd("#{identifier}:failed", meta_id)
-            puts "raised, expiring later? #{e.inspect}"
+            identifiers.each do |ident|
+              Resque.redis.sadd("#{ident}:failed", meta_id)
+            end
             meta = get_meta(meta_id)
-            meta.expire_in = 1
-            # self.expire_meta_in
+            meta.expire_in = expire_failures_meta_in
+            meta['exception_message'] = e.message
+            meta['exception_backtrace'] = e.backtrace
             meta.save
             raise e
           ensure
-            Resque.redis.srem("#{identifier}:running", meta_id)
+            identifiers.each do |ident|
+              Resque.redis.srem("#{ident}:running", meta_id)
+            end
           end
         else
           yield
