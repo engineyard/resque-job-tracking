@@ -1,0 +1,15 @@
+A resque plugin for tracking jobs and their state (pending, running, failed) based on some originating entity.
+This plugin relies heavily on resque-meta to store meta data on resque jobs.
+
+Our use case is:
+
+Account is a model in our database. Accounts do lots of things which trigger background jobs.  We want to be able to see for a given account:
+1. What jobs are waiting to be run.
+2. What jobs are currently running.
+3. What jobs ran and had some exception in the past 24 hours.
+
+You define how jobs are tracked by defining the "track" method on your job class (see the tests for an example)
+
+You define how long meta data is kept around by defining expire_meta_in, expire_normal_meta_in, and/or expire_failures_meta_in on your job class (see tests for an example)
+
+You can access the list of pending, running, and failed jobs using the Resque::Plugins::JobTracking methods: pending_jobs, running_jobs, failed_jobs (again, see tests)
