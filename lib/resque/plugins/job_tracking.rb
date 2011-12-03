@@ -29,49 +29,65 @@ module Resque
       end
 
       def before_enqueue_job_tracking(meta_id, *jobargs)
-        if self.respond_to?(:track)
-          identifiers = track(*jobargs)
-          identifiers.each do |ident|
-            Resque.redis.sadd("#{ident}:pending", meta_id)
-          end
-          meta = get_meta(meta_id)
-          meta["job_args"] = jobargs
-          meta.save
+        if meta_id &&
+           self.respond_to?(:track) &&
+           meta = get_meta(meta_id)
+        then
+          enqueue_with_job_tracking(meta, meta_id, *jobargs)
         end
       end
 
-      def around_perform_job_tracking(meta_id, *jobargs)
-        if self.respond_to?(:track)
-          identifiers = track(*jobargs)
-          identifiers.each do |ident|
-            Resque.redis.srem("#{ident}:pending", meta_id)
-            Resque.redis.sadd("#{ident}:running", meta_id)
-          end
-          begin
-            to_return = yield
-            meta = get_meta(meta_id)
-            meta.expire_in = expire_normal_meta_in
-            meta.save
-            to_return
-          rescue => e
-            identifiers.each do |ident|
-              Resque.redis.sadd("#{ident}:failed", meta_id)
-            end
-            meta = get_meta(meta_id)
-            meta.expire_in = expire_failures_meta_in
-            meta['exception_message'] = e.message
-            meta['exception_backtrace'] = e.backtrace
-            meta.save
-            raise e
-          ensure
-            identifiers.each do |ident|
-              Resque.redis.srem("#{ident}:running", meta_id)
-            end
-          end
+      def around_perform_job_tracking(meta_id, *jobargs, &block)
+        if meta_id &&
+          self.respond_to?(:track) &&
+          meta = get_meta(meta_id)
+        then
+          perform_with_job_tracking(meta, meta_id, *jobargs, &block)
         else
           yield
         end
       end
+
+    private
+
+      def enqueue_with_job_tracking(meta, meta_id, *jobargs)
+        identifiers = track(*jobargs)
+        identifiers.each do |ident|
+          Resque.redis.sadd("#{ident}:pending", meta_id)
+        end
+        meta["job_args"] = jobargs
+        meta.save
+      end
+
+      def perform_with_job_tracking(meta, meta_id, *jobargs, &block)
+        identifiers = track(*jobargs)
+        identifiers.each do |ident|
+          Resque.redis.srem("#{ident}:pending", meta_id)
+          Resque.redis.sadd("#{ident}:running", meta_id)
+        end
+        begin
+          to_return = yield
+          meta = get_meta(meta_id)
+          meta.expire_in = expire_normal_meta_in
+          meta.save
+          to_return
+        rescue => e
+          identifiers.each do |ident|
+            Resque.redis.sadd("#{ident}:failed", meta_id)
+          end
+          meta = get_meta(meta_id)
+          meta.expire_in = expire_failures_meta_in
+          meta['exception_message'] = e.message
+          meta['exception_backtrace'] = e.backtrace
+          meta.save
+          raise e
+        ensure
+          identifiers.each do |ident|
+            Resque.redis.srem("#{ident}:running", meta_id)
+          end
+        end
+      end
+
 
     end
   end
