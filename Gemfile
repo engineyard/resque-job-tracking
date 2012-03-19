@@ -7,4 +7,5 @@ gem 'json'
 
 group :test do
   gem 'cubbyhole'
+  gem 'rake'
 end
