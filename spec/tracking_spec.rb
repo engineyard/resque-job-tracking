@@ -83,10 +83,11 @@ class JobOnHost < BaseJobWithPerform
   def perform(account_id)
   end
 
-  def self.extra_meta_on_start
+  def self.extra_meta_on_start(account_id)
     {
       'hostname' => "foo",
-      'pid' => $$
+      'pid' => $$,
+      'account_id' => account_id
     }
   end
 
@@ -184,6 +185,7 @@ describe TypicalProblemJob do
     meta_data["hostname"].should eq "foo"
     meta_data["pid"].should_not be_nil
     meta_data["pid"].should_not eq $$
+    meta_data["account_id"].should eq account.id
   end
 
 end
