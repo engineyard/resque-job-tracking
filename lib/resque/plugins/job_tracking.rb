@@ -61,6 +61,11 @@ module Resque
 
       def perform_with_job_tracking(meta, meta_id, *jobargs, &block)
         identifiers = track(*jobargs)
+        if self.respond_to?(:extra_meta_on_start)
+          meta = get_meta(meta_id)
+          meta.data.merge!(self.extra_meta_on_start)
+          meta.save
+        end
         identifiers.each do |ident|
           Resque.redis.srem("#{ident}:pending", meta_id)
           Resque.redis.sadd("#{ident}:running", meta_id)

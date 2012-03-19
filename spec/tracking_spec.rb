@@ -74,6 +74,24 @@ class TypicalProblemJob < BaseJobWithPerform
 end
 
 
+class JobOnHost < BaseJobWithPerform
+
+  def self.track(account_id)
+    [Account.get(account_id).job_tracking_identifier]
+  end
+
+  def perform(account_id)
+  end
+
+  def self.extra_meta_on_start
+    {
+      'hostname' => "foo",
+      'pid' => $$
+    }
+  end
+
+end
+
 describe TypicalProblemJob do
   include WorkerSupport
 
@@ -151,6 +169,21 @@ describe TypicalProblemJob do
     meta_data = TypicalProblemJob.get_meta(meta_id)
     meta_data['job_class'].should eq "TypicalProblemJob"
     meta_data['job_args'].should eq [account.id, 'dontcare']
+  end
+
+  it "should store the hostname and pid" do
+    account = Account.create
+    JobOnHost.enqueue(account.id)
+    account.pending_jobs.size.should eq 1
+    meta_id = account.pending_jobs.first
+    meta_data = JobOnHost.get_meta(meta_id)
+    meta_data["hostname"].should be_nil
+    meta_data["pid"].should be_nil
+    work_until_finished
+    meta_data = JobOnHost.get_meta(meta_id)
+    meta_data["hostname"].should eq "foo"
+    meta_data["pid"].should_not be_nil
+    meta_data["pid"].should_not eq $$
   end
 
 end
